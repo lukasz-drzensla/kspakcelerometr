@@ -8,12 +8,6 @@ do_plot = True  # variable which contains boolean whether to plot 3D vector or n
 port_name = 'COM16'  # the name of the port to which our device is connected to
 
 
-# because quit with windows X button does not work correctly, we have added a quit button
-def quit_app(self):
-    print("QUIT")
-    sys.exit()
-
-
 # function which enables or disables 3D vector plotting hence it is resource intensive
 def start_stop(self):
     global do_plot
@@ -44,10 +38,9 @@ plt.ion()
 figure = plt.figure()
 # add buttons
 axquit = figure.add_axes([0.81, 0.05, 0.1, 0.075])
-bquit = Button(axquit, 'Quit')
+breset = Button(axquit, 'Reset')
 axstop = figure.add_axes([0.5, 0.05, 0.28, 0.075])
 bstop = Button(axstop, "Start/stop plotting vector")
-bquit.on_clicked(quit_app)
 bstop.on_clicked(start_stop)
 
 # add figures to the plot, one row as a separator
@@ -68,6 +61,51 @@ z_line, = ax_xyz.plot(time, Z, color='b')  # viewing plot of z axis measurement
 
 axes = ["X", "Y", "Z"]  # axes labels array
 so_far_biggest = [0.0, 0.0, 0.0]  # array for storing the biggest read of values
+
+
+# reset all the measurements
+def reset(self):
+    global X
+    global Y
+    global Z
+    global values
+    global so_far_biggest
+    so_far_biggest = [0.0, 0.0, 0.0]  # array for storing the biggest read of values
+    X = np.zeros(50)  # vector for storing measurements of x axis acceleration
+    Y = np.zeros(50)  # vector for storing measurements of y axis acceleration
+    Z = np.zeros(50)  # vector for storing measurements of z axis acceleration
+    values = np.zeros(50)  # vector for storing measurements of magnitude of acceleration
+
+
+def roll_values():
+    global X
+    global Y
+    global Z
+    global values
+    values = np.roll(values, 1)
+    X = np.roll(X, 1)
+    Y = np.roll(Y, 1)
+    Z = np.roll(Z, 1)
+
+
+def insert_at_zero(x, y, z, magnitude):
+    global X
+    global Y
+    global Z
+    global values
+    values[0] = magnitude
+    X[0] = x
+    Y[0] = y
+    Z[0] = z
+
+def calc_magnitude (x, y, z):
+    magnitude = np.power(x, 2) + np.power(y, 2) + np.power(z, 2)
+    magnitude = np.float_power(magnitude, 0.5)
+    magnitude = np.around(magnitude, 2)
+    return magnitude
+
+
+breset.on_clicked(reset)
 while 1:
     read = device.readline()  # read from the device
 
@@ -89,21 +127,15 @@ while 1:
     # used to determine the biggest component vector - an index is more useful than making it an if
     # statement, hence the array
 
-    #calculate the maginitude
-    magnitude = np.power(x, 2) + np.power(y, 2) + np.power(z, 2)
-    magnitude = np.float_power(magnitude, 0.5)
-    magnitude = np.around(magnitude, 2)
+    # calculate the magnitude
+    magnitude = calc_magnitude(x,y,z)
 
-    #present the data on a chart - shift an array so the last reading becomes the first, the first the second, etc. then replace the first (past last)
-    values = np.roll(values, 1)
-    X = np.roll(X, 1)
-    Y = np.roll(Y, 1)
-    Z = np.roll(Z, 1)
-    values[0] = magnitude
-    X[0] = x
-    Y[0] = y
-    Z[0] = z
-    #check if reading is bigger than previous readings
+    # present the data on a chart - shift an array so the last reading becomes the first, the first the second,
+    # etc. then replace the first (past last)
+    roll_values()
+    insert_at_zero(x, y, z, magnitude)
+
+    # check if reading is bigger than previous readings
     if absv[0] > so_far_biggest[0]:
         so_far_biggest[0] = absv[0]
     if absv[1] > so_far_biggest[1]:
@@ -111,18 +143,19 @@ while 1:
     if absv[2] > so_far_biggest[2]:
         so_far_biggest[2] = absv[2]
 
-    colorchar = 'b' #char used to determine colour of the 3D vector - blue biggest positive, red biggest negative
+    colorchar = 'b'  # char used to determine colour of the 3D vector - blue biggest positive, red biggest negative
 
     # determine the biggest component vector
     index = np.argmax(absv)
     if v[index] < 0:
-        colorchar = 'r' #if biggest is negative, then make the vector red
+        colorchar = 'r'  # if biggest is negative, then make the vector red
 
-    status = "stationary" #if detected acceleration is bigger than g, an external force must have been applied - change the status text
+    status = "stationary"  # if detected acceleration is bigger than g, an external force must have been applied -
+    # - change the status text
     if magnitude > 10.1 or magnitude < 9:
         status = "external force applied"
 
-    #clear the vector representation plot and make titles
+    # clear the vector representation plot and make titles
     ax_vect.clear()
     plt.subplot(421)
     plt.title("Vector representation", fontsize=9)
@@ -134,7 +167,7 @@ while 1:
     ax_vect.set_zlim([10, -10])
     ax_vect.set_zlabel("Z-axis")
 
-    #set titles for magnitude and x y z plots
+    # set titles for magnitude and x y z plots
     plt.subplot(422)
     plt.title("Magnitude over measurements", fontsize=9)
     plt.xlabel(
@@ -151,13 +184,13 @@ while 1:
     ax_xyz.set_xlim([0, 50])
     ax_xyz.set_ylim([-20, 20])
 
-    #update plots data
+    # update plots data
     magnitude_line.set_ydata(values)
     x_line.set_ydata(X)
     y_line.set_ydata(Y)
     z_line.set_ydata(Z)
 
-    #if plotting 3D vector enabled, then plot it
+    # if plotting 3D vector enabled, then plot it
     if do_plot:
         line1 = ax_vect.quiver(0, 0, 0, x, y, z, color=colorchar)
     figure.canvas.flush_events()
